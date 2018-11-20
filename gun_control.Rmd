@@ -47,26 +47,108 @@ skimr::skim(approval_rate) %>%
   knitr::kable()
 ```
 
-```{r echo=FALSE}
-ggplot(approval_rate, aes(x = number_of_federal_firearms_licensees/number_of_residents_in_millions, y = number_of_background_checks/number_of_residents_in_millions, color = app_perc)) +
-  geom_point() +  
-  labs(
-    title = "Application vs. Proccessed Rate",
-    x = "Percentage of people approved",
-    y = "Percentage of people processed"
-  )
-
-```
-
-
 
 
 ```{r echo=FALSE}
 library(usmap)
 
-plot_usmap(data = approval_rate, values = "app_perc") + scale_fill_continuous(
-    low = "white", high = "red", name = "Approval Percentage (2017)", label = scales::comma
-  ) + theme(legend.position = "right")
+plot_usmap(data = approval_rate, values = "app_perc") + 
+  scale_fill_continuous(low = "white", high = "red", name = "Approval Percentage (2017)", label = scales::comma) + 
+  theme(legend.position = "right") +
+  labs(title = "Approval Rate Across different States")
 
 ```
+
+
+```{r}
+# website URL
+url = "https://lawcenter.giffords.org/scorecard/#rankings"
+gun_climate_url = read_html(url)
+# extract table and clean data
+gun_climate_data = 
+	gun_climate_url %>% 
+  html_nodes(css = "table") %>% 
+  .[[1]] %>% 
+  html_table(header = TRUE) %>% 
+  as.tibble() %>% 
+	janitor::clean_names() %>% 
+	rename(
+		law_strength = gun_law_strength_ranked, 
+		grade_2017 = x2017grade, 
+		death_rate_rank = gun_death_rate_ranked, 
+		death_rate = gun_death_rate_per_100k) %>% 
+	mutate(
+    grade_2017 = factor(grade_2017, 
+                      levels = c("A", "A-", "B+", "B", "C+", "C", "C-", "D", "D-", "F")), 
+    grade_2017 = fct_collapse(grade_2017, 
+    													A = c("A", "A-"), 
+    													B = c("B+", "B"), 
+    													C = c("C+", "C", "C-"), 
+    													D = c("D", "D-")), 
+    state_abb = state.abb)
+
+```
+
+Using gun legislation strength:
+
+```{r echo=FALSE}
+gun_control = gun_climate_data %>% 
+  inner_join(approval_rate, by = "state")
+
+ggplot(gun_control, aes(x = app_perc, y = law_strength, color = law_strength)) +
+  geom_point() +  
+  labs(
+    title = "Approval Rate vs Law Strength",
+    x = "Percentage of people approved",
+    y = "Law Strength"
+  )
+
+```
+
+Weird thing happened: legislation strength is not closely related to approval rate as we thought before. 
+
+Then I thought, maybe less people would apply for gun license if the state has strict laws. So I draw a plot between law strength and appoval percentage(how many people get approved license among total population): 
+
+```{r echo=FALSE}
+ggplot(gun_control, aes(x = number_of_federal_firearms_licensees/number_of_residents_in_millions, y = law_strength, color = law_strength)) +
+  geom_point(aes(size = death_rate)) +  
+  labs(
+    title = "Approval percentage vs Law Strength",
+    x = "Percentage of people approved among total population",
+    y = "Law Strength"
+  )
+```
+It works. 
+
+Then I moved on to application percentage (proportion of people applying for the license in total population)
+
+```{r echo=FALSE}
+ggplot(gun_control, aes(x = number_of_background_checks/number_of_residents_in_millions, y = law_strength, color = law_strength)) +
+  geom_point() +  
+  labs(
+    title = "Approval Rate vs Law Strength",
+    x = "Percentage of people processed among total population",
+    y = "Law Strength"
+  )
+```
+Clearly people in different state share equal willing to apply for guns. My first assumption is not correct.
+
+Therefore, the problem should be approval percentage vs. processed percentage:
+```{r echo=FALSE}
+ggplot(approval_rate, aes(x = number_of_federal_firearms_licensees/number_of_residents_in_millions, y = number_of_background_checks/number_of_residents_in_millions, color = app_perc)) +
+  geom_point() +  
+  labs(
+    title = "Application percentage vs. Proccessed Percentage",
+    x = "Percentage of people approved among total population",
+    y = "Percentage of people processed among total population"
+  )
+```
+
+Therefore, I recommend us using Approval percentage vs Law Strength (the second scatterplot). 
+
+
+
+
+
+
 
