@@ -1,0 +1,68 @@
+---
+title: "Gun Control"
+author: "Yuelin Long"
+date: "November 16, 2018"
+output: github_document
+---
+
+```{r include=FALSE}
+#Load packages
+library(tidyverse)
+library(rvest)
+library(httr)
+```
+
+```{r}
+form_proc = read_html("https://www.atf.gov/resource-center/data-statistics") %>%
+  html_nodes(css = "table") %>% 
+  .[[5]] %>%
+  html_table() %>%
+  slice(-1) %>% 
+  as_tibble()
+```
+
+```{r}
+total_pop = readxl::read_xlsx("./data/population-in-the-states-of-the-us-as-of-2017.xlsx", sheet = "Data", range = "B5:C56") %>% 
+  rename(state = X__1) %>% 
+  janitor::clean_names()
+
+approved_lic = readxl::read_xlsx("./data/number-of-federal-firearms-licensees-in-the-us-in-2017-by-state.xlsx", sheet = "Data", range = "B5:C57") %>% 
+  rename(state = X__1) %>% 
+  filter(state != "Other Territories") %>% 
+  janitor::clean_names()
+
+back_check = readxl::read_xlsx("./data/nics-background-checks-done-by-us-firearms-licensees-2017-by-state.xlsx", sheet = "Data", range = "B5:C56") %>% 
+  rename(state = X__1) %>% 
+  janitor::clean_names()
+
+approval_rate = inner_join(approved_lic, back_check) %>% 
+  inner_join(total_pop) %>% 
+  mutate(app_perc = 100 * number_of_federal_firearms_licensees / number_of_background_checks)
+
+skimr::skim(as.data.frame(summary(approval_rate)))
+```
+
+```{r}
+ggplot(approval_rate, aes(x = number_of_federal_firearms_licensees/number_of_residents_in_millions, y = number_of_background_checks/number_of_residents_in_millions, color = app_perc)) +
+  geom_point() +  
+  labs(
+    title = "Application vs. Proccessed Rate",
+    x = "Percentage of people applied",
+    y = "Percentage of people processed",
+    caption = "Data from the rnoaa package"
+  )
+
+```
+
+
+
+
+```{r}
+library(usmap)
+
+plot_usmap(data = approval_rate, values = "app_perc") + scale_fill_continuous(
+    low = "white", high = "red", name = "Approval Percentage (2017)", label = scales::comma
+  ) + theme(legend.position = "right")
+
+```
+
