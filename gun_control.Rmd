@@ -5,6 +5,7 @@ date: "November 16, 2018"
 output: github_document
 ---
 
+
 ```{r include=FALSE}
 #Load packages
 library(tidyverse)
@@ -12,44 +13,47 @@ library(rvest)
 library(httr)
 ```
 
-```{r}
-form_proc = read_html("https://www.atf.gov/resource-center/data-statistics") %>%
-  html_nodes(css = "table") %>% 
-  .[[5]] %>%
-  html_table() %>%
-  slice(-1) %>% 
-  as_tibble()
-```
 
-```{r}
-total_pop = readxl::read_xlsx("./data/population-in-the-states-of-the-us-as-of-2017.xlsx", sheet = "Data", range = "B5:C56") %>% 
+To quantify how strict are gun controls in different states, we are using:
+
++ The number of background checks done by U.S. firearms licensees to approximate number of people applied for license; 
++ The number of federal firearms licensees in the U.S. to approximate the number of people get license approved;
++ The proportion of licensees and background checks to indicate approval percentage.
+
+```{r echo=FALSE}
+
+clean_fun = function(address, area){
+  readxl::read_xlsx(address, sheet = "Data", range = area) %>% 
   rename(state = X__1) %>% 
   janitor::clean_names()
+}
 
-approved_lic = readxl::read_xlsx("./data/number-of-federal-firearms-licensees-in-the-us-in-2017-by-state.xlsx", sheet = "Data", range = "B5:C57") %>% 
-  rename(state = X__1) %>% 
-  filter(state != "Other Territories") %>% 
-  janitor::clean_names()
 
-back_check = readxl::read_xlsx("./data/nics-background-checks-done-by-us-firearms-licensees-2017-by-state.xlsx", sheet = "Data", range = "B5:C56") %>% 
-  rename(state = X__1) %>% 
-  janitor::clean_names()
+total_pop = clean_fun("./data/population-in-the-states-of-the-us-as-of-2017.xlsx", "B5:C56")
 
-approval_rate = inner_join(approved_lic, back_check) %>% 
-  inner_join(total_pop) %>% 
+approved_lic = clean_fun("./data/number-of-federal-firearms-licensees-in-the-us-in-2017-by-state.xlsx", "B5:C57") %>% 
+  filter(state != "Other Territories")
+
+back_check = clean_fun("./data/nics-background-checks-done-by-us-firearms-licensees-2017-by-state.xlsx", "B5:C56")
+
+approval_rate = inner_join(approved_lic, back_check, by = "state") %>% 
+  inner_join(total_pop, by = "state") %>% 
   mutate(app_perc = 100 * number_of_federal_firearms_licensees / number_of_background_checks)
 
-skimr::skim(as.data.frame(summary(approval_rate)))
+skimr::skim(approval_rate) %>%
+            select(variable:stat,value) %>%
+            filter(stat != "hist") %>%
+            spread(key = stat,value = value) %>% 
+  knitr::kable()
 ```
 
-```{r}
+```{r echo=FALSE}
 ggplot(approval_rate, aes(x = number_of_federal_firearms_licensees/number_of_residents_in_millions, y = number_of_background_checks/number_of_residents_in_millions, color = app_perc)) +
   geom_point() +  
   labs(
     title = "Application vs. Proccessed Rate",
-    x = "Percentage of people applied",
-    y = "Percentage of people processed",
-    caption = "Data from the rnoaa package"
+    x = "Percentage of people approved",
+    y = "Percentage of people processed"
   )
 
 ```
@@ -57,7 +61,7 @@ ggplot(approval_rate, aes(x = number_of_federal_firearms_licensees/number_of_res
 
 
 
-```{r}
+```{r echo=FALSE}
 library(usmap)
 
 plot_usmap(data = approval_rate, values = "app_perc") + scale_fill_continuous(
